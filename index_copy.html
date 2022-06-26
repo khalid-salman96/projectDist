@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="./simplepeer.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.14/ace.js"
+        integrity="sha512-6ts6Fu561/yzWvD6uwQp3XVYwiWNpWnZ0hdeQrETqtnQiGjTfOS06W76aUDnq51hl1SxXtJaqy7IsZ3oP/uZEg=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"
+        integrity="sha384-7EyYLQZgWBi67fBtVxw60/OWl1kjsfrPFcaU0pp0nAh+i8FD068QogUvg85Ewy1k"
+        crossorigin="anonymous"></script>
+    <script type="text/javascript">
+        document.addEventListener('DOMContentLoaded', function () {
+            let sharebtn = document.querySelector("#share")
+            let connectForm = document.querySelector("#connect")
+            let connectId = document.querySelector("#connect_id")
+            let connectedP = document.querySelector("#connected")
+            let download = document.querySelector("#download")
+            let save = document.querySelector("#save")
+            let editor = ace.edit("txt_editor");
+            let connected = 0;
+            let fileID = '';
+            editor.setTheme("ace/theme/chrome");
+            editor.session.setOptions({ tabSize: 1 });
+            editor.setShowPrintMargin(false);
+            let doc = editor.getSession().getDocument()
+            window.doc = doc
+            window.editor = editor
+            let initRender = false;
+            doc.on('change', function (e) {
+                if (!initRender) {
+                    sendChanges(e);
+                }
+            });
+
+            const socket = io();
+            socket.on("init", (data, initCount, file) => {
+                doc.setValue(data);
+                connected = initCount;
+                connectedP.innerText = connected;
+                fileID = file
+                initRender = false
+            });
+            socket.on("requestInit", (id) => {
+                socket.emit('answerInit', id, doc.getValue(), connected)
+            });
+            socket.on("change", (data) => {
+                initRender = true
+                doc.applyDelta(data);
+                initRender = false
+            });
+            socket.on("joining", () => {
+                connected += 1;
+                connectedP.innerText = connected;
+            });
+            socket.on("leaving", () => {
+                connected -= 1;
+                connectedP.innerText = connected;
+            });
+            socket.on('share', file => {
+                fileID = file;
+                document.querySelector('#id').innerText = fileID;
+                if (!connected) {
+                    connected = 1;
+                    connectedP.innerText = connected;
+                }
+            })
+
+
+
+            sharebtn.onclick = () => {
+                
+                if (fileID)
+                    document.querySelector('#id').innerText = fileID;
+                else
+                    socket.emit('save', doc.getValue())
+            }
+
+            save.onclick = e => {
+                e.preventDefault();
+                if (fileID)
+                    socket.emit('save', doc.getValue(), fileID)
+                else
+                    socket.emit('save', doc.getValue())
+
+            }
+            download.onclick = () => {
+                const value = doc.getValue()
+                var fileBlob = new Blob([value], { type: "application/text" });
+
+                var link = document.createElement("a");
+                download.setAttribute("href", URL.createObjectURL(fileBlob));
+                download.setAttribute("download", "*.txt");
+            }
+
+            connectForm.onsubmit = (e) => {
+                e.preventDefault();
+                doc.setValue('');
+                initRender = true;
+                socket.emit('join', connectId.value)
+            }
+
+
+
+
+            const sendChanges = (e) => {
+                socket.emit("onChange", e)
+            }
+        });
+
+    </script>
+    <title>Distributed Editor</title>
+    <style>
+        a,
+        a:visited,
+        a:link {
+            cursor: pointer;
+            color: inherit;
+            text-decoration: none;
+        }
+
+        body {
+            padding-top: 70px;
+        }
+
+        #txt_editor {
+            margin: 1rem 0;
+            width: 100%;
+            height: 480px;
+            display: block;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #1f2483;
+            font-family: 'Montserrat', sans-serif;
+            color: white;
+        }
+
+        body>div {
+            padding: 10px;
+            margin: auto;
+        }
+
+        textarea {
+            width: 75%;
+            height: 650px;
+            background: #FAFBF9;
+            margin-top: 14px;
+            overflow: hidden;
+        }
+
+        h2,
+        h1 {
+            color: #4F9329;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="parent">
+        <div style="display: flex; justify-content: space-between;">
+            <h1>Distributed Text Editor</h1>
+            <p id="connected"></p>
+        </div>
+        <hr>
+        <div style="display: flex; gap:1rem">
+            <form id="connect">
+                <input id="connect_id" type="text" required>
+                <button type="submit">connect</button>
+            </form>
+            <a id="save">Save</a>
+            <a id="download">download</a>
+            <div>
+                <a id="share">Share</a>
+                <div id="id"></div>
+            </div>
+        </div>
+
+        <div>
+            <div id="txt_editor"></div>
+
+            <br>
+            <br>
+
+        </div>
+
+
+
+
+    </div>
+</body>
+
+</html>
